@@ -9,11 +9,11 @@ include $(TOPDIR)/rules.mk
 ARCH:=mipsel
 BOARD:=rb532
 BOARDNAME:=Mikrotik RouterBoard 532
-FEATURES:=jffs2 pci targz broken
+FEATURES:=pci targz
 
-LINUX_VERSION:=3.8.12
+KERNEL_PATCHVER:=3.18
 
 include $(INCLUDE_DIR)/target.mk
-DEFAULT_PACKAGES += wpad-mini kmod-madwifi kmod-input-rb532
+DEFAULT_PACKAGES += wpad-mini kmod-ath5k kmod-input-rb532
 
 $(eval $(call BuildTarget))

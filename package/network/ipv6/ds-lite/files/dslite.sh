@@ -12,10 +12,11 @@
 proto_dslite_setup() {
 	local cfg="$1"
 	local iface="$2"
-	local link="dslite-$cfg"
+	local link="ds-$cfg"
+	local remoteip6
 
-	local mtu ttl peeraddr ip6addr tunlink
-	json_get_vars mtu ttl peeraddr ip6addr tunlink
+	local mtu ttl peeraddr ip6addr tunlink zone weakif
+	json_get_vars mtu ttl peeraddr ip6addr tunlink zone weakif
 
 	[ -z "$peeraddr" ] && {
 		proto_notify_error "$cfg" "MISSING_ADDRESS"
@@ -25,6 +26,17 @@ proto_dslite_setup() {
 
 	( proto_add_host_dependency "$cfg" "::" "$tunlink" )
 
+	remoteip6=$(resolveip -6 $peeraddr)
+	if [ -z "$remoteip6" ]; then
+		sleep 3
+		remoteip6=$(resolveip -6 $peeraddr)
+		if [ -z "$remoteip6" ]; then
+			proto_notify_error "$cfg" "AFTR_DNS_FAIL"
+			return
+		fi
+	fi
+	peeraddr="${remoteip6%% *}"
+
 	[ -z "$ip6addr" ] && {
 		local wanif="$tunlink"
 		if [ -z "$wanif" ] && ! network_find_wan6 wanif; then
@@ -33,8 +45,11 @@ proto_dslite_setup() {
 		fi
 
 		if ! network_get_ipaddr6 ip6addr "$wanif"; then
-			proto_notify_error "$cfg" "NO_WAN_LINK"
-			return
+			[ -z "$weakif" ] && weakif="lan"
+			if ! network_get_ipaddr6 ip6addr "$weakif"; then
+				proto_notify_error "$cfg" "NO_WAN_LINK"
+				return
+			fi
 		fi
 	}
 
@@ -50,6 +65,17 @@ proto_dslite_setup() {
 	json_add_string remote "$peeraddr"
 	[ -n "$tunlink" ] && json_add_string link "$tunlink"
 	proto_close_tunnel
+
+	proto_add_data
+	[ -n "$zone" ] && json_add_string zone "$zone"
+
+	json_add_array firewall
+	  json_add_object ""
+	    json_add_string type nat
+	    json_add_string target ACCEPT
+	  json_close_object
+	json_close_array
+	proto_close_data
 
 	proto_send_update "$cfg"
 }
@@ -67,6 +93,8 @@ proto_dslite_init_config() {
 	proto_config_add_string "tunlink"
 	proto_config_add_int "mtu"
 	proto_config_add_int "ttl"
+	proto_config_add_string "zone"
+	proto_config_add_string "weakif"
 }
 
 [ -n "$INCLUDE_ONLY" ] || {

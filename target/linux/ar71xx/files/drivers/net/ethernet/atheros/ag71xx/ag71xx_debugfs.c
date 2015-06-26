@@ -183,6 +183,7 @@ static ssize_t read_file_ring(struct file *file, char __user *user_buf,
 	desc_hw = ag71xx_rr(ag, desc_reg);
 	for (i = 0; i < ring->size; i++) {
 		struct ag71xx_buf *ab = &ring->buf[i];
+		struct ag71xx_desc *desc = ag71xx_ring_desc(ring, i);
 		u32 desc_dma = ((u32) ring->descs_dma) + i * ring->desc_size;
 
 		len += snprintf(buf + len, buflen - len,
@@ -192,10 +193,10 @@ static ssize_t read_file_ring(struct file *file, char __user *user_buf,
 			(i == dirty) ? 'D' : ' ',
 			(desc_hw == desc_dma) ? 'H' : ' ',
 			desc_dma,
-			ab->desc->next,
-			ab->desc->data,
-			ab->desc->ctrl,
-			(ab->desc->ctrl & DESC_EMPTY) ? 'E' : '*',
+			desc->next,
+			desc->data,
+			desc->ctrl,
+			(desc->ctrl & DESC_EMPTY) ? 'E' : '*',
 			ab->timestamp);
 	}
 
@@ -244,10 +245,14 @@ void ag71xx_debugfs_exit(struct ag71xx *ag)
 
 int ag71xx_debugfs_init(struct ag71xx *ag)
 {
-	ag->debug.debugfs_dir = debugfs_create_dir(ag->dev->name,
+	struct device *dev = &ag->pdev->dev;
+
+	ag->debug.debugfs_dir = debugfs_create_dir(dev_name(dev),
 						   ag71xx_debugfs_root);
-	if (!ag->debug.debugfs_dir)
-		return -ENOMEM;
+	if (!ag->debug.debugfs_dir) {
+		dev_err(dev, "unable to create debugfs directory\n");
+		return -ENOENT;
+	}
 
 	debugfs_create_file("int_stats", S_IRUGO, ag->debug.debugfs_dir,
 			    ag, &ag71xx_fops_int_stats);

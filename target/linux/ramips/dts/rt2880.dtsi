@@ -13,10 +13,6 @@
 		bootargs = "console=ttyS0,57600";
 	};
 
-	memorydetect {
-		ralink,memory = <0x8000000 0x200000 0x8000000>;
-	};
-
 	cpuintc: cpuintc@0 {
 		#address-cells = <0>;
 		#interrupt-cells = <1>;
@@ -125,14 +121,58 @@
 		};
 	};
 
+	pinctrl {
+		compatible = "ralink,rt2880-pinmux";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&state_default>;
+
+		state_default: pinctrl0 {
+			sdram {
+				ralink,group = "sdram";
+				ralink,function = "sdram";
+			};
+		};
+
+		spi_pins: spi {
+			spi {
+				ralink,group = "spi";
+				ralink,function = "spi";
+			};
+		};
+
+		uartlite_pins: uartlite {
+			uart {
+				ralink,group = "uartlite";
+				ralink,function = "uartlite";
+			};
+		};
+	};
+
+	rstctrl: rstctrl {
+		compatible = "ralink,rt2880-reset";
+		#reset-cells = <1>;
+	};
+
 	ethernet@400000 {
 		compatible = "ralink,rt2880-eth";
 		reg = <0x00400000 10000>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		resets = <&rstctrl 18>;
+		reset-names = "fe";
 
 		interrupt-parent = <&cpuintc>;
 		interrupts = <5>;
 
 		status = "disabled";
+
+		port@0 {
+			compatible = "ralink,rt2880-port", "ralink,eth-port";
+			reg = <0>;
+		};
 
 		mdio-bus {
 			#address-cells = <1>;
@@ -150,8 +190,6 @@
 		interrupts = <6>;
 
 		ralink,eeprom = "soc_wmac.eeprom";
-
-		status = "disabled";
 	};
 
 };

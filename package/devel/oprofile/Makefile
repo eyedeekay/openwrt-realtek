@@ -8,19 +8,21 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=oprofile
-PKG_VERSION:=0.9.7
+PKG_VERSION:=0.9.9
 PKG_RELEASE:=1
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_URL:=@SF/oprofile/
-PKG_MD5SUM:=8b5d1d9b65f84420bcc3234777ad3be3
+PKG_MD5SUM:=00aec1287da2dfffda17a9b1c0a01868
 
 PKG_MAINTAINER:=Felix Fietkau <nbd@openwrt.org>
 
 PKG_BUILD_DEPENDS:=binutils
+PKG_LICENSE:=GPL-2.0+
 PKG_FIXUP:=autoreconf
 PKG_INSTALL:=1
 PKG_BUILD_PARALLEL:=1
+PKG_USE_MIPS16:=0
 
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/kernel.mk
@@ -30,7 +32,7 @@ define Package/oprofile
   CATEGORY:=Development
   TITLE:=OProfile System Profiler
   URL:=http://oprofile.sourceforge.net
-  DEPENDS:=+libpopt +kmod-oprofile +libstdcpp +objdump
+  DEPENDS:=+libpopt +kmod-oprofile +libstdcpp +objdump +librt @(!TARGET_uml||BROKEN)
 endef
 
 define Package/oprofile/description

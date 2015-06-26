@@ -9,10 +9,10 @@ include $(TOPDIR)/rules.mk
 ARCH:=mipsel
 BOARD:=xburst
 BOARDNAME:=Ingenic XBurst
-FEATURES:=jffs2 targz ubifs audio broken
-SUBTARGETS:=qi_lb60 n516 n526 id800wt
+FEATURES:=targz nand ubifs audio
+SUBTARGETS:=qi_lb60
 
-LINUX_VERSION:=3.8.12
+KERNEL_PATCHVER:=3.18
 
 DEVICE_TYPE=other
 

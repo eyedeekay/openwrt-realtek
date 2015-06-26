@@ -10,10 +10,11 @@ ARCH:=arm
 BOARD:=realview
 BOARDNAME:=ARM Ltd. Realview board (qemu)
 FEATURES:=fpu ramdisk
-CFLAGS:=-Os -pipe -march=armv6k -mtune=mpcore -mfloat-abi=softfp -mfpu=vfp -fno-caller-saves
+CPU_TYPE:=mpcore
+CPU_SUBTYPE:=vfp
 MAINTAINER:=Florian Fainelli <florian@openwrt.org>
 
-LINUX_VERSION:=3.8.12
+KERNEL_PATCHVER:=3.18
 
 DEVICE_TYPE:=developerboard
 
@@ -23,6 +24,6 @@ define Target/Description
 	Build images for ARM Ltd. Realview boards to be run with qemu
 endef
 
-KERNELNAME:="zImage"
+KERNELNAME:=zImage
 
 $(eval $(call BuildTarget))

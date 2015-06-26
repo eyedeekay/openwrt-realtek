@@ -9,26 +9,26 @@
 # Steps:
 # 1) toolchain/binutils/install
 #    build & install binutils
-# 2) toolchain/gcc/prepare
+# 2) toolchain/gcc/minimal/install
 #    build & install a minimal gcc, needed for steps 3 & 4
 # 3) toolchain/kernel-headers/install
 #    install kernel headers, needed for step 4
-# 4) toolchain/libc/prepare
+# 4) toolchain/libc/headers/install
 #    build & install libc headers & support files, needed for step 5
-# 5) toolchain/gcc/compile
+# 5) toolchain/gcc/initial/install
 #    build & install an initial gcc, needed for step 6
-# 6) toolchain/libc/compile
+# 6) toolchain/libc/install
 #    build & install the final libc
-# 7) toolchain/gcc/install
+# 7) toolchain/gcc/final/install
 #    build & install the final gcc
-# 8) toolchain/libc/install
+# 8) toolchain/libc/utils/install
 #    build & install libc utilities
 #
 
 curdir:=toolchain
 
 # subdirectories to descend into
-$(curdir)/builddirs := $(if $(CONFIG_GDB),gdb) $(if $(CONFIG_INSIGHT),insight) $(if $(CONFIG_EXTERNAL_TOOLCHAIN),wrapper,kernel-headers binutils gcc/minimal gcc/initial gcc/final $(LIBC)/headers $(LIBC))
+$(curdir)/builddirs := $(if $(CONFIG_GDB),gdb) $(if $(CONFIG_INSIGHT),insight) $(if $(CONFIG_EXTERNAL_TOOLCHAIN),wrapper,kernel-headers binutils gcc/minimal gcc/initial gcc/final $(LIBC)/headers $(LIBC) fortify-headers)
 ifdef CONFIG_USE_UCLIBC
   $(curdir)/builddirs += $(LIBC)/utils
 endif
@@ -51,11 +51,6 @@ ifeq ($(CONFIG_EXTERNAL_TOOLCHAIN),)
   $(curdir)/$(LIBC)/utils/prepare:=$(curdir)/$(LIBC)/headers/prepare
 endif
 
-ifdef CONFIG_GCC_VERSION_LLVM
-  $(curdir)/builddirs += llvm
-  $(curdir)/gcc/minimal/compile += $(curdir)/llvm/install
-endif
-
 ifndef DUMP_TARGET_DB
 ifneq ($(ARCH),)
   $(TOOLCHAIN_DIR)/info.mk: .config
@@ -74,7 +69,7 @@ endif
 
 # prerequisites for the individual targets
 $(curdir)/ := .config prereq
-$(curdir)//prepare = $(STAGING_DIR)/.prepared $(TOOLCHAIN_DIR)/info.mk
+$(curdir)//prepare = $(STAGING_DIR)/.prepared $(TOOLCHAIN_DIR)/info.mk $(tools/stamp-install)
 $(curdir)//compile = $(1)/prepare
 $(curdir)//install = $(1)/compile
 

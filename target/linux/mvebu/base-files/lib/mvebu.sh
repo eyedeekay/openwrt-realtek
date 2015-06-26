@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2013 OpenWrt.org
+# Copyright (C) 2013-2015 OpenWrt.org
 #
 
 MVEBU_BOARD_NAME=
@@ -28,6 +28,24 @@ mvebu_board_detect() {
 	*"PlatHome OpenBlocks AX3-4 board")
 		name="openblocks-ax3-4"
 		;;
+	*"Marvell Armada XP GP Board")
+		name="armada-xp-gp"
+		;;
+	*"Linksys WRT1200AC")
+		name="armada-385-linksys-caiman"
+		;;
+	*"Linksys WRT1900AC")
+		name="armada-xp-linksys-mamba"
+		;;
+	*"Linksys WRT1900ACv2")
+		name="armada-385-linksys-cobra"
+		;;
+	*"Marvell Armada 385 Access Point Development Board")
+		name="armada-385-db-ap"
+		;;
+	*"Marvell Armada XP Development Board DB-MV784MP-GP")
+		name="armada-xp-gp"
+		;;
 	esac
 
 	[ -z "$name" ] && name="unknown"
@@ -44,6 +62,7 @@ mvebu_board_detect() {
 mvebu_board_name() {
 	local name
 
+	[ -f /tmp/sysinfo/board_name ] || mvebu_board_detect
 	[ -f /tmp/sysinfo/board_name ] && name=$(cat /tmp/sysinfo/board_name)
 	[ -z "$name" ] && name="unknown"
 

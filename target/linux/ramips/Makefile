@@ -9,17 +9,15 @@ include $(TOPDIR)/rules.mk
 ARCH:=mipsel
 BOARD:=ramips
 BOARDNAME:=Ralink RT288x/RT3xxx
-SUBTARGETS:=rt288x rt305x rt3883
-CFLAGS:=-Os -pipe -fno-caller-saves -mno-branch-likely
+SUBTARGETS:=rt305x mt7620 mt7621 mt7628 rt3883 rt288x
 FEATURES:=squashfs gpio
+MAINTAINER:=John Crispin <blogic@openwrt.org>
 
-LINUX_VERSION:=3.8.12
+KERNEL_PATCHVER:=3.18
 
 include $(INCLUDE_DIR)/target.mk
-DEFAULT_PACKAGES+=\
-	kmod-leds-gpio kmod-input-core kmod-input-polldev \
-	kmod-input-gpio-keys-polled kmod-button-hotplug \
-	kmod-rt2800-pci wpad-mini swconfig
+DEFAULT_PACKAGES += \
+	kmod-leds-gpio kmod-gpio-button-hotplug wpad-mini swconfig
 
 define Target/Description
 	Build firmware images for Ralink RT288x/RT3xxx based boards.

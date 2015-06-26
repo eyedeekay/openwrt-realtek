@@ -14,7 +14,9 @@ fix_seama_header() {
 board=$(ramips_board_name)
 
 case "$board" in
-dir-645)
+cy-swr1100 | \
+dir-645 | \
+dir-860l-b1)
 	fix_seama_header kernel
 	;;
 esac

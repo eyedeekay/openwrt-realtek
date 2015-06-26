@@ -1,20 +1,27 @@
 #
-# Copyright (C) 2006,2007 OpenWrt.org
+# Copyright (C) 2006-2014 OpenWrt.org
 #
 # This is free software, licensed under the GNU General Public License v2.
 # See /LICENSE for more information.
 #
 
+include $(INCLUDE_DIR)/feeds.mk
+
 # invoke ipkg-build with some default options
 IPKG_BUILD:= \
-  ipkg-build -c -o 0 -g 0
+  $(SCRIPT_DIR)/ipkg-build -c -o 0 -g 0
 
 IPKG_STATE_DIR:=$(TARGET_DIR)/usr/lib/opkg
 
+# 1: package name
+# 2: variable name
+# 3: variable suffix
+# 4: file is a script
 define BuildIPKGVariable
 ifdef Package/$(1)/$(2)
+  $$(IPKG_$(1)) : VAR_$(2)$(3)=$$(Package/$(1)/$(2))
   $(call shexport,Package/$(1)/$(2))
-  $(1)_COMMANDS += var2file "$(call shvar,Package/$(1)/$(2))" $(2);
+  $(1)_COMMANDS += echo "$$$$$$$$$(call shvar,Package/$(1)/$(2))" > $(2)$(3); $(if $(4),chmod 0755 $(2)$(3);)
 endif
 endef
 
@@ -54,32 +61,46 @@ ifneq ($(PKG_NAME),toolchain)
 	@( \
 		rm -f $(PKG_INFO_DIR)/$(1).missing; \
 		( \
-			export READELF=$(TARGET_CROSS)readelf XARGS="$(XARGS)"; \
+			export \
+				READELF=$(TARGET_CROSS)readelf \
+				OBJCOPY=$(TARGET_CROSS)objcopy \
+				XARGS="$(XARGS)"; \
 			$(SCRIPT_DIR)/gen-dependencies.sh "$$(IDIR_$(1))"; \
 		) | while read FILE; do \
-			grep -q "$$$$FILE" $(PKG_INFO_DIR)/$(1).provides || \
+			grep -qxF "$$$$FILE" $(PKG_INFO_DIR)/$(1).provides || \
 				echo "$$$$FILE" >> $(PKG_INFO_DIR)/$(1).missing; \
 		done; \
 		if [ -f "$(PKG_INFO_DIR)/$(1).missing" ]; then \
-			echo "Package $(1) is missing dependencies for the following libraries:"; \
-			cat "$(PKG_INFO_DIR)/$(1).missing"; \
+			echo "Package $(1) is missing dependencies for the following libraries:" >&2; \
+			cat "$(PKG_INFO_DIR)/$(1).missing" >&2; \
 			false; \
 		fi; \
 	)
   endef
 endif
 
+_addsep=$(word 1,$(1))$(foreach w,$(wordlist 2,$(words $(1)),$(1)),$(strip $(2) $(w)))
+_cleansep=$(subst $(space)$(2)$(space),$(2)$(space),$(1))
+mergelist=$(call _cleansep,$(call _addsep,$(1),$(comma)),$(comma))
+addfield=$(if $(strip $(2)),$(1): $(2))
+_define=define
+_endef=endef
+
 ifeq ($(DUMP),)
   define BuildTarget/ipkg
-    IPKG_$(1):=$(PACKAGE_DIR)/$(1)_$(VERSION)_$(PKGARCH).ipk
+    PDIR_$(1):=$(call FeedPackageDir,$(1))
+    IPKG_$(1):=$$(PDIR_$(1))/$(1)_$(VERSION)_$(PKGARCH).ipk
     IDIR_$(1):=$(PKG_BUILD_DIR)/ipkg-$(PKGARCH)/$(1)
     KEEP_$(1):=$(strip $(call Package/$(1)/conffiles))
 
     ifeq ($(BUILD_VARIANT),$$(if $$(VARIANT),$$(VARIANT),$(BUILD_VARIANT)))
     ifdef Package/$(1)/install
-      ifneq ($(CONFIG_PACKAGE_$(1))$(SDK)$(DEVELOPER),)
+      ifneq ($(CONFIG_PACKAGE_$(1))$(DEVELOPER),)
         IPKGS += $(1)
         compile: $$(IPKG_$(1)) $(PKG_INFO_DIR)/$(1).provides $(STAGING_DIR_ROOT)/stamp/.$(1)_installed
+        ifneq ($(ABI_VERSION),)
+        compile: $(PKG_INFO_DIR)/$(1).version
+        endif
 
         ifeq ($(CONFIG_PACKAGE_$(1)),y)
           .PHONY: $(PKG_INSTALL_STAMP).$(1)
@@ -93,9 +114,7 @@ ifeq ($(DUMP),)
 			echo "$(1)" >> $(PKG_INSTALL_STAMP)
         endif
       else
-        compile: $(1)-disabled
-        $(1)-disabled:
-		@echo "WARNING: skipping $(1) -- package not selected" >&2
+        $(if $(CONFIG_PACKAGE_$(1)),$$(info WARNING: skipping $(1) -- package not selected))
       endif
     endif
     endif
@@ -107,10 +126,10 @@ ifeq ($(DUMP),)
     $(FixupReverseDependencies)
 
     $(eval $(call BuildIPKGVariable,$(1),conffiles))
-    $(eval $(call BuildIPKGVariable,$(1),preinst))
-    $(eval $(call BuildIPKGVariable,$(1),postinst))
-    $(eval $(call BuildIPKGVariable,$(1),prerm))
-    $(eval $(call BuildIPKGVariable,$(1),postrm))
+    $(eval $(call BuildIPKGVariable,$(1),preinst,,1))
+    $(eval $(call BuildIPKGVariable,$(1),postinst,-pkg,1))
+    $(eval $(call BuildIPKGVariable,$(1),prerm,-pkg,1))
+    $(eval $(call BuildIPKGVariable,$(1),postrm,,1))
 
     $(STAGING_DIR_ROOT)/stamp/.$(1)_installed: $(STAMP_BUILT)
 	rm -rf $(STAGING_DIR_ROOT)/tmp-$(1)
@@ -121,48 +140,71 @@ ifeq ($(DUMP),)
 	rm -rf $(STAGING_DIR_ROOT)/tmp-$(1)
 	touch $$@
 
+    $(PKG_INFO_DIR)/$(1).version: $$(IPKG_$(1))
+	echo '$(ABI_VERSION)' | cmp -s - $$@ || \
+		echo '$(ABI_VERSION)' > $$@
+
+    Package/$(1)/DEPENDS := $$(call mergelist,$$(filter-out @%,$$(IDEPEND_$(1))))
+    ifneq ($$(EXTRA_DEPENDS),)
+      Package/$(1)/DEPENDS := $$(EXTRA_DEPENDS)$$(if $$(Package/$(1)/DEPENDS),$$(comma) $$(Package/$(1)/DEPENDS))
+    endif
+
+$(_define) Package/$(1)/CONTROL
+Package: $(1)
+Version: $(VERSION)
+$$(call addfield,Depends,$$(Package/$(1)/DEPENDS)
+)$$(call addfield,Conflicts,$$(call mergelist,$(CONFLICTS))
+)$$(call addfield,Provides,$(PROVIDES)
+)$$(call addfield,Source,$(SOURCE)
+)$$(call addfield,License,$$(PKG_LICENSE)
+)$$(call addfield,LicenseFiles,$$(PKG_LICENSE_FILES)
+)$$(call addfield,Section,$(SECTION)
+)$$(call addfield,Require-User,$(USERID)
+)$(if $(filter hold,$(PKG_FLAGS)),Status: unknown hold not-installed
+)$(if $(filter essential,$(PKG_FLAGS)),Essential: yes
+)$(if $(MAINTAINER),Maintainer: $(MAINTAINER)
+)Architecture: $(PKGARCH)
+Installed-Size: 0
+$(_endef)
+
     $(PKG_INFO_DIR)/$(1).provides: $$(IPKG_$(1))
+    $$(IPKG_$(1)) : export CONTROL=$$(Package/$(1)/CONTROL)
+    $$(IPKG_$(1)) : export DESCRIPTION=$$(Package/$(1)/description)
     $$(IPKG_$(1)): $(STAMP_BUILT) $(INCLUDE_DIR)/package-ipkg.mk
-	@rm -rf $(PACKAGE_DIR)/$(1)_* $$(IDIR_$(1))
+	@rm -rf $$(PDIR_$(1))/$(1)_* $$(IDIR_$(1))
 	mkdir -p $(PACKAGE_DIR) $$(IDIR_$(1))/CONTROL $(PKG_INFO_DIR)
 	$(call Package/$(1)/install,$$(IDIR_$(1)))
 	-find $$(IDIR_$(1)) -name 'CVS' -o -name '.svn' -o -name '.#*' -o -name '*~'| $(XARGS) rm -rf
 	@( \
-		find $$(IDIR_$(1)) -name lib\*.so\* | awk -F/ '{ print $$$$NF }'; \
+		find $$(IDIR_$(1)) -name lib\*.so\* -or -name \*.ko | awk -F/ '{ print $$$$NF }'; \
 		for file in $$(patsubst %,$(PKG_INFO_DIR)/%.provides,$$(IDEPEND_$(1))); do \
 			if [ -f "$$$$file" ]; then \
 				cat $$$$file; \
 			fi; \
-		done; \
+		done; $(Package/$(1)/extra_provides) \
 	) | sort -u > $(PKG_INFO_DIR)/$(1).provides
 	$(if $(PROVIDES),@for pkg in $(PROVIDES); do cp $(PKG_INFO_DIR)/$(1).provides $(PKG_INFO_DIR)/$$$$pkg.provides; done)
 	$(CheckDependencies)
 
 	$(RSTRIP) $$(IDIR_$(1))
-	( \
-		echo "Package: $(1)"; \
-		echo "Version: $(VERSION)"; \
-		DEPENDS='$(EXTRA_DEPENDS)'; \
-		for depend in $$(filter-out @%,$$(IDEPEND_$(1))); do \
-			DEPENDS=$$$${DEPENDS:+$$$$DEPENDS, }$$$${depend##+}; \
-		done; \
-		[ -z "$$$$DEPENDS" ] || echo "Depends: $$$$DEPENDS"; \
-		$(if $(PROVIDES), echo "Provides: $(PROVIDES)"; ) \
-		echo "Source: $(SOURCE)"; \
-		$(if $(PKG_SOURCE), echo "SourceFile: $(PKG_SOURCE)"; ) \
-		$(if $(PKG_SOURCE_URL), echo "SourceURL: $(PKG_SOURCE_URL)"; ) \
-		$(if $(PKG_LICENSE), echo "License: $(PKG_LICENSE)"; ) \
-		$(if $(PKG_LICENSE_FILES), echo "LicenseFiles: $(PKG_LICENSE_FILES)"; ) \
-		echo "Section: $(SECTION)"; \
-		$(if $(filter hold,$(PKG_FLAGS)),echo "Status: unknown hold not-installed"; ) \
-		$(if $(filter essential,$(PKG_FLAGS)), echo "Essential: yes"; ) \
-		$(if $(MAINTAINER),echo "Maintainer: $(MAINTAINER)"; ) \
-		echo "Architecture: $(PKGARCH)"; \
-		echo "Installed-Size: 0"; \
-		echo -n "Description: "; $(SH_FUNC) getvar $(call shvar,Package/$(1)/description) | sed -e 's,^[[:space:]]*, ,g'; \
- 	) > $$(IDIR_$(1))/CONTROL/control
-	chmod 644 $$(IDIR_$(1))/CONTROL/control
-	$(SH_FUNC) (cd $$(IDIR_$(1))/CONTROL; \
+	(cd $$(IDIR_$(1))/CONTROL; \
+		( \
+			echo "$$$$CONTROL"; \
+			printf "Description: "; echo "$$$$DESCRIPTION" | sed -e 's,^[[:space:]]*, ,g'; \
+		) > control; \
+		chmod 644 control; \
+		( \
+			echo "#!/bin/sh"; \
+			echo "[ \"\$$$${IPKG_NO_SCRIPT}\" = \"1\" ] && exit 0"; \
+			echo ". \$$$${IPKG_INSTROOT}/lib/functions.sh"; \
+			echo "default_postinst \$$$$0 \$$$$@"; \
+		) > postinst; \
+		( \
+			echo "#!/bin/sh"; \
+			echo ". \$$$${IPKG_INSTROOT}/lib/functions.sh"; \
+			echo "default_prerm \$$$$0 \$$$$@"; \
+		) > prerm; \
+		chmod 0755 postinst prerm; \
 		$($(1)_COMMANDS) \
 	)
 
@@ -179,11 +221,12 @@ ifeq ($(DUMP),)
 		)
     endif
 
-	$(IPKG_BUILD) $$(IDIR_$(1)) $(PACKAGE_DIR)
+	$(INSTALL_DIR) $$(PDIR_$(1))
+	$(IPKG_BUILD) $$(IDIR_$(1)) $$(PDIR_$(1))
 	@[ -f $$(IPKG_$(1)) ]
 
     $(1)-clean:
-	rm -f $(PACKAGE_DIR)/$(1)_*
+	rm -f $$(PDIR_$(1))/$(1)_*
 
     clean: $(1)-clean
 
