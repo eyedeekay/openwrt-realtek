@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2006-2010 OpenWrt.org
+# Copyright (C) 2006-2015 OpenWrt.org
 #
 # This is free software, licensed under the GNU General Public License v2.
 # See /LICENSE for more information.
@@ -36,6 +36,7 @@ endef
 
 define Image/Prepare
 	cat $(KDIR)/vmlinux | $(STAGING_DIR_HOST)/bin/lzma e -si -so -eos -lc1 -lp2 -pb2 > $(KDIR)/vmlinux.lzma
+	$(STAGING_DIR_HOST)/bin/lzma2eva $(EVA_LOADADDR) 0x$${shell $(TARGET_CROSS)nm $(KDIR)/vmlinux | grep -w kernel_entry | cut -d' ' -f1} $(KDIR)/vmlinux.lzma $(KDIR)/loader.eva
 
 	$(MAKE) -C $(GENERIC_PLATFORM_DIR)/image/lzma-loader \
 		$(LOADER_MAKEOPTS) \
@@ -44,6 +45,11 @@ define Image/Prepare
 	$(OBJCOPY_SREC) $(KDIR)/vmlinux.elf $(KDIR)/vmlinux.srec
 	srec2bin $(KDIR)/loader.srec $(KDIR)/loader.bin
 	srec2bin $(KDIR)/vmlinux.srec $(KDIR)/vmlinux.bin
+ifneq ($(CONFIG_TARGET_ROOTFS_INITRAMFS),)
+	$(OBJCOPY_SREC) $(KDIR)/vmlinux-initramfs.elf \
+		$(KDIR)/vmlinux-initramfs.srec
+	srec2bin $(KDIR)/vmlinux-initramfs.srec $(KDIR)/vmlinux-initramfs.bin
+endif
 endef
 
 define align/jffs2-64k
@@ -59,34 +65,33 @@ endef
 
 define Image/Build/CyberTAN
 	(dd if=/dev/zero bs=16 count=1; cat $(BIN_DIR)/$(IMG_PREFIX)-$(1).bin) | \
-		$(STAGING_DIR_HOST)/bin/addpattern -p $(3) -o $(BIN_DIR)/openwrt-$(2)-$(4)-code.bin
+		$(STAGING_DIR_HOST)/bin/addpattern -p $(3) -o $(BIN_DIR)/$(IMG_PREFIX)-$(2)-$(4)-code.bin
 endef
 
 define Image/Build/Titan
-	$(STAGING_DIR_HOST)/bin/mktitanimg -o $(BIN_DIR)/openwrt-$(2)-$(4)-code.bin -i $(KDIR)/loader.bin $(KDIR)/root.$(1) -a 0x10000 0x10000 -h 2  -p 0x4C575943 -s 0x0b010000
-	$(STAGING_DIR_HOST)/bin/mktitanimg -o $(BIN_DIR)/openwrt-$(2)-na-$(4)-code.bin -i $(KDIR)/loader.bin $(KDIR)/root.$(1) -a 0x10000 0x10000 -h 2  -p 0x4D575943 -s 0x0b010000
+	$(STAGING_DIR_HOST)/bin/mktitanimg -o $(BIN_DIR)/$(IMG_PREFIX)-$(2)-$(4)-code.bin -i $(KDIR)/loader.bin $(KDIR)/root.$(1) -a 0x10000 0x10000 -h 2  -p 0x4C575943 -s 0x0b010000
+	$(STAGING_DIR_HOST)/bin/mktitanimg -o $(BIN_DIR)/$(IMG_PREFIX)-$(2)-na-$(4)-code.bin -i $(KDIR)/loader.bin $(KDIR)/root.$(1) -a 0x10000 0x10000 -h 2  -p 0x4D575943 -s 0x0b010000
 endef
 
 define Image/Build/AudioCodes
-	( dd if=$(KDIR)/vmlinux.elf bs=64k conv=sync ; dd if=$(KDIR)/root.$(1) ) > $(BIN_DIR)/openwrt-$(2)-$(1).bin
+	( dd if=$(KDIR)/vmlinux.elf bs=64k conv=sync ; dd if=$(KDIR)/root.$(1) ) > $(BIN_DIR)/$(IMG_PREFIX)-$(2)-$(1).bin
 endef
 
 #define Image/Build/sErCoMm
 #	cat sercomm/adam2.bin "$(BIN_DIR)/$(IMG_PREFIX)-$(1).bin" > "$(KDIR)/dgfw.tmp"
 #	dd if=sercomm/$(2) of="$(KDIR)/dgfw.tmp" bs=$$$$((0x3e0000 - 80)) seek=1 conv=notrunc
-#	$(STAGING_DIR_HOST)/bin/dgfirmware -f -w "$(BIN_DIR)/openwrt-$(2)-$(3).img" "$(KDIR)/dgfw.tmp"
+#	$(STAGING_DIR_HOST)/bin/dgfirmware -f -w "$(BIN_DIR)/$(IMG_PREFIX)-$(2)-$(3).img" "$(KDIR)/dgfw.tmp"
 #	rm -f "$(KDIR)/dgfw.tmp"
 #endef
 
 define Image/Build/EVA
-	$(STAGING_DIR_HOST)/bin/lzma2eva $(EVA_LOADADDR) 0x$${shell $(TARGET_CROSS)nm $(KDIR)/linux-*/vmlinux | grep -w kernel_entry | cut -d' ' -f1} $(KDIR)/vmlinux.lzma $(KDIR)/loader.eva
-	dd if=$(KDIR)/loader.eva $(call align/$(1)) > $(BIN_DIR)/openwrt-$(2)-$(KERNEL)-$(1).bin
-	cat $(KDIR)/root.$(1) >> $(BIN_DIR)/openwrt-$(2)-$(KERNEL)-$(1).bin
-	$(call prepare_generic_squashfs,$(BIN_DIR)/openwrt-$(2)-$(KERNEL)-$(1).bin)
+	dd if=$(KDIR)/loader.eva $(call align/$(1)) > $(BIN_DIR)/$(IMG_PREFIX)-$(2)-$(KERNEL)-$(1).bin
+	cat $(KDIR)/root.$(1) >> $(BIN_DIR)/$(IMG_PREFIX)-$(2)-$(KERNEL)-$(1).bin
+	$(call prepare_generic_squashfs,$(BIN_DIR)/$(IMG_PREFIX)-$(2)-$(KERNEL)-$(1).bin)
 endef
 
 define Image/Build/Initramfs
-	$(CP) $(KDIR)/vmlinux.bin $(BIN_DIR)/$(IMG_PREFIX)-initramfs.bin
+	$(CP) $(KDIR)/vmlinux-initramfs.bin $(BIN_DIR)/$(IMG_PREFIX)-initramfs.bin
 endef
 
 ifeq ($(CONFIG_AR7_TI),y)

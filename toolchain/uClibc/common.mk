@@ -26,15 +26,14 @@ UCLIBC_TARGET_ARCH:=$(shell echo $(ARCH) | sed -e s'/-.*//' \
 		-e 's/i.86/i386/' \
 		-e 's/sparc.*/sparc/' \
 		-e 's/arm.*/arm/g' \
-		-e 's/avr32.*/avr32/g' \
 		-e 's/m68k.*/m68k/' \
 		-e 's/ppc/powerpc/g' \
 		-e 's/v850.*/v850/g' \
 		-e 's/sh64/sh/' \
 		-e 's/sh[234].*/sh/' \
 		-e 's/mips.*/mips/' \
+		-e 's/lexra/mips/' \
 		-e 's/mipsel.*/mips/' \
-		-e 's/cris.*/cris/' \
 )
 
 GEN_CONFIG=$(SCRIPT_DIR)/kconfig.pl -n \
@@ -45,13 +44,11 @@ GEN_CONFIG=$(SCRIPT_DIR)/kconfig.pl -n \
 			$(if $(CONFIG_MIPS64_ABI),.$(subst ",,$(CONFIG_MIPS64_ABI)), \
 			$(if $(CONFIG_HAS_SPE_FPU),$(if $(wildcard $(CONFIG_DIR)/$(ARCH).e500),.e500)))))
 
-TARGET_CFLAGS := $(filter-out -mips16,$(TARGET_CFLAGS))
-
 CPU_CFLAGS = \
 	-funsigned-char -fno-builtin -fno-asm \
 	--std=gnu99 -ffunction-sections -fdata-sections \
 	-Wno-unused-but-set-variable \
-	$(TARGET_CFLAGS)
+	$(TARGET_CFLAGS) -ggdb
 
 UCLIBC_MAKE = PATH='$(TOOLCHAIN_DIR)/initial/bin:$(TARGET_PATH)' $(MAKE) $(HOST_JOBS) -C $(HOST_BUILD_DIR) \
 	$(TARGET_CONFIGURE_OPTS) \
@@ -81,6 +78,8 @@ define Host/Configure
 		-e 's,^.*UCLIBC_HAS_SOFT_FLOAT.*,UCLIBC_HAS_SOFT_FLOAT=$(if $(CONFIG_SOFT_FLOAT),y,n),g' \
 		-e 's,^.*UCLIBC_HAS_SHADOW.*,UCLIBC_HAS_SHADOW=$(if $(CONFIG_SHADOW_PASSWORDS),y,n),g' \
 		-e 's,^.*UCLIBC_HAS_LOCALE.*,UCLIBC_HAS_LOCALE=$(if $(CONFIG_BUILD_NLS),y,n),g' \
+		-e 's,^.*UCLIBC_BUILD_ALL_LOCALE.*,UCLIBC_BUILD_ALL_LOCALE=$(if $(CONFIG_BUILD_NLS),y,n),g' \
+		-e 's,^.*UCLIBC_HAS_SSP[^_].*,UCLIBC_HAS_SSP=$(if $(or $(CONFIG_PKG_CC_STACKPROTECTOR_REGULAR),$(CONFIG_PKG_CC_STACKPROTECTOR_STRONG)),y,n),g' \
 		$(HOST_BUILD_DIR)/.config.new
 	cmp -s $(HOST_BUILD_DIR)/.config.new $(HOST_BUILD_DIR)/.config.last || { \
 		cp $(HOST_BUILD_DIR)/.config.new $(HOST_BUILD_DIR)/.config && \

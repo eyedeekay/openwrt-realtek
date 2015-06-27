@@ -2,7 +2,7 @@
 # Copyright (C) 2002-2003 Erik Andersen <andersen@uclibc.org>
 # Copyright (C) 2004 Manuel Novoa III <mjn3@uclibc.org>
 # Copyright (C) 2005-2006 Felix Fietkau <nbd@openwrt.org>
-# Copyright (C) 2006-2013 OpenWrt.org
+# Copyright (C) 2006-2014 OpenWrt.org
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -26,29 +26,46 @@ PKG_VERSION:=$(firstword $(subst +, ,$(GCC_VERSION)))
 GCC_DIR:=$(PKG_NAME)-$(PKG_VERSION)
 
 ifeq ($(findstring linaro, $(CONFIG_GCC_VERSION)),linaro)
+    ifeq ($(CONFIG_GCC_VERSION),"4.5-linaro")
+      PKG_REV:=4.5-2012.03
+      PKG_VERSION:=4.5.4
+      PKG_VERSION_MAJOR:=4.5
+      PKG_MD5SUM:=0c25f93e15e362e352c933e4649a7fc6
+    endif
     ifeq ($(CONFIG_GCC_VERSION),"4.6-linaro")
-      PKG_REV:=4.6-2012.12
+      PKG_REV:=4.6-2013.05
       PKG_VERSION:=4.6.4
       PKG_VERSION_MAJOR:=4.6
-      PKG_MD5SUM:=6b6c6a4faa026edd1193cf6426309039
+      PKG_MD5SUM:=26b48802ae1203cd99415026fbf56ed7
+      PKG_COMP:=bz2
     endif
     ifeq ($(CONFIG_GCC_VERSION),"4.8-linaro")
-      PKG_REV:=4.8-2013.04
-      PKG_VERSION:=4.8.1
+      PKG_REV:=4.8-2014.04
+      PKG_VERSION:=4.8.3
       PKG_VERSION_MAJOR:=4.8
-      PKG_MD5SUM:=b6b8195019c7cb93629727ad14eaf7ca
+      PKG_MD5SUM:=5ba2f3a449b1658ccc09d27cc7ab3c03
+      PKG_COMP:=xz
     endif
-    PKG_SOURCE_URL:=http://launchpad.net/gcc-linaro/$(PKG_VERSION_MAJOR)/$(PKG_REV)/+download/
-    PKG_SOURCE:=$(PKG_NAME)-linaro-$(PKG_REV).tar.bz2
+    ifeq ($(CONFIG_GCC_VERSION),"4.9-linaro")
+      LINARO_RELEASE:=15.03
+      PKG_REV:=4.9-2015.03
+      PKG_VERSION:=4.9.3
+      PKG_VERSION_MAJOR:=4.9
+      PKG_MD5SUM:=f9d256d120adfbb45dd3e2d22b70cba9
+      PKG_COMP:=xz
+    endif
+    ifneq ($(LINARO_RELEASE),)
+      PKG_SOURCE_URL:=http://releases.linaro.org/$(LINARO_RELEASE)/components/toolchain/gcc-linaro/$(PKG_VERSION_MAJOR)
+    else
+      PKG_SOURCE_URL:=http://launchpad.net/gcc-linaro/$(PKG_VERSION_MAJOR)/$(PKG_REV)/+download/
+    endif
+    PKG_SOURCE:=$(PKG_NAME)-linaro-$(PKG_REV).tar.$(PKG_COMP)
     GCC_DIR:=gcc-linaro-$(PKG_REV)
     HOST_BUILD_DIR:=$(BUILD_DIR_TOOLCHAIN)/$(GCC_DIR)
 else
   PKG_SOURCE_URL:=@GNU/gcc/gcc-$(PKG_VERSION)
   PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.bz2
 
-  ifeq ($(PKG_VERSION),4.4.7)
-    PKG_MD5SUM:=295709feb4441b04e87dea3f1bab4281
-  endif
   ifeq ($(PKG_VERSION),4.6.3)
     PKG_MD5SUM:=773092fe5194353b02bb0110052a972e
   endif
@@ -93,6 +110,10 @@ endif
 
 GCC_CONFIGURE:= \
 	SHELL="$(BASH)" \
+	$(if $(shell gcc --version 2>&1 | grep LLVM), \
+		CFLAGS="-O2 -fbracket-depth=512 -pipe" \
+		CXXFLAGS="-O2 -fbracket-depth=512 -pipe" \
+	) \
 	$(HOST_SOURCE_DIR)/configure \
 		--with-bugurl=$(BUGURL) \
 		--with-pkgversion="$(PKGVERSION)" \
@@ -114,14 +135,10 @@ GCC_CONFIGURE:= \
 			--with-abi=$(subst ",,$(CONFIG_MIPS64_ABI))) \
 		--with-gmp=$(TOPDIR)/staging_dir/host \
 		--with-mpfr=$(TOPDIR)/staging_dir/host \
+		--with-mpc=$(TOPDIR)/staging_dir/host \
 		--disable-decimal-float
 ifneq ($(CONFIG_mips)$(CONFIG_mipsel),)
   GCC_CONFIGURE += --with-mips-plt
-endif
-
-ifeq ($(CONFIG_GCC_VERSION_4_4),)
-  GCC_CONFIGURE+= \
-		--with-mpc=$(TOPDIR)/staging_dir/host
 endif
 
 ifneq ($(CONFIG_SSP_SUPPORT),)
@@ -154,6 +171,13 @@ endif
 
 ifneq ($(GCC_ARCH),)
   GCC_CONFIGURE+= --with-arch=$(GCC_ARCH)
+endif
+
+ifneq ($(CONFIG_SOFT_FLOAT),y)
+  ifeq ($(CONFIG_arm),y)
+    GCC_CONFIGURE+= \
+		--with-float=hard
+  endif
 endif
 
 GCC_MAKE:= \

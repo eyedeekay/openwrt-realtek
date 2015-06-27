@@ -12,9 +12,11 @@ __target_inc=1
 DEVICE_TYPE?=router
 
 # Default packages - the really basic set
-DEFAULT_PACKAGES:=base-files libc libgcc busybox dropbear mtd uci opkg hotplug2 netifd
+DEFAULT_PACKAGES:=base-files libc libgcc busybox dropbear mtd uci opkg netifd fstools
+# For nas targets
+DEFAULT_PACKAGES.nas:=block-mount fdisk lsblk mdadm
 # For router targets
-DEFAULT_PACKAGES.router:=dnsmasq iptables ip6tables ppp ppp-mod-pppoe kmod-ipt-nathelper firewall3 6relayd odhcp6c
+DEFAULT_PACKAGES.router:=dnsmasq iptables ip6tables ppp ppp-mod-pppoe kmod-nf-nathelper firewall odhcpd odhcp6c
 DEFAULT_PACKAGES.bootloader:=
 
 ifneq ($(DUMP),)
@@ -51,6 +53,9 @@ endif
 # Add device specific packages (here below to allow device type set from subtarget)
 DEFAULT_PACKAGES += $(DEFAULT_PACKAGES.$(DEVICE_TYPE))
 
+filter_packages = $(filter-out -% $(patsubst -%,%,$(filter -%,$(1))),$(1))
+extra_packages = $(if $(filter wpad-mini wpad nas,$(1)),iwinfo)
+
 define Profile/Default
   NAME:=
   PACKAGES:=
@@ -60,23 +65,23 @@ ifndef Profile
 define Profile
   $(eval $(call Profile/Default))
   $(eval $(call Profile/$(1)))
-  $(eval $(call shexport,Profile/$(1)/Config))
-  $(eval $(call shexport,Profile/$(1)/Description))
+  dumpinfo : $(call shexport,Profile/$(1)/Config)
+  dumpinfo : $(call shexport,Profile/$(1)/Description)
   DUMPINFO += \
 	echo "Target-Profile: $(1)"; \
 	echo "Target-Profile-Name: $(NAME)"; \
-	echo "Target-Profile-Packages: $(PACKAGES)"; \
+	echo "Target-Profile-Packages: $(PACKAGES) $(call extra_packages,$(DEFAULT_PACKAGES) $(PACKAGES))"; \
 	if [ -f ./config/profile-$(1) ]; then \
 		echo "Target-Profile-Kconfig: yes"; \
 	fi; \
 	echo "Target-Profile-Config: "; \
-	$(SH_FUNC) getvar "$(call shvar,Profile/$(1)/Config)"; \
+	echo "$$$$$$$$$(call shvar,Profile/$(1)/Config)"; \
 	echo "@@"; \
 	echo "Target-Profile-Description:"; \
-	$(SH_FUNC) getvar "$(call shvar,Profile/$(1)/Description)"; \
+	echo "$$$$$$$$$(call shvar,Profile/$(1)/Description)"; \
 	echo "@@"; \
 	echo;
-  ifeq ($(CONFIG_TARGET_$(call target_conf,$(BOARD)_$(if $(SUBTARGET),$(SUBTARGET)_)$(1))),y)
+  ifeq ($(CONFIG_TARGET_$(call target_conf,$(BOARD)_$(if $(SUBTARGET),$(SUBTARGET)_))$(1)),y)
     PROFILE=$(1)
   endif
 endef
@@ -101,13 +106,16 @@ else
   endif
 endif
 
-$(eval $(call shexport,Target/Description))
-
 ifneq ($(TARGET_BUILD)$(if $(DUMP),,1),)
   include $(INCLUDE_DIR)/kernel-version.mk
 endif
 
+
 GENERIC_PLATFORM_DIR := $(TOPDIR)/target/linux/generic
+ifeq ($(CONFIG_TARGET_realtek),y)
+# stop any generic kernel patches being applied
+GENERIC_PLATFORM_DIR := $(TOPDIR)/target/linux/not-generic
+endif
 GENERIC_PATCH_DIR := $(GENERIC_PLATFORM_DIR)/patches$(if $(wildcard $(GENERIC_PLATFORM_DIR)/patches-$(KERNEL_PATCHVER)),-$(KERNEL_PATCHVER))
 GENERIC_FILES_DIR := $(foreach dir,$(wildcard $(GENERIC_PLATFORM_DIR)/files $(GENERIC_PLATFORM_DIR)/files-$(KERNEL_PATCHVER)),"$(dir)")
 
@@ -141,6 +149,10 @@ ifeq ($(CONFIG_TARGET),subtarget)
   LINUX_RECONFIG_LIST = $(wildcard $(GENERIC_LINUX_CONFIG) $(LINUX_TARGET_CONFIG) $(LINUX_SUBTARGET_CONFIG))
   LINUX_RECONFIG_TARGET = $(LINUX_SUBTARGET_CONFIG)
 endif
+ifeq ($(CONFIG_TARGET),subtarget_platform)
+  LINUX_RECONFIG_LIST = $(wildcard $(GENERIC_LINUX_CONFIG) $(LINUX_SUBTARGET_CONFIG) $(LINUX_TARGET_CONFIG))
+  LINUX_RECONFIG_TARGET = $(LINUX_TARGET_CONFIG)
+endif
 ifeq ($(CONFIG_TARGET),env)
   LINUX_RECONFIG_LIST = $(LINUX_KCONFIG_LIST)
   LINUX_RECONFIG_TARGET = $(TOPDIR)/env/kernel-config
@@ -163,7 +175,10 @@ ifeq ($(DUMP),1)
     .SILENT: $(TMP_CONFIG)
     .PRECIOUS: $(TMP_CONFIG)
 
-    ifneq ($(CONFIG_GENERIC_GPIO),)
+    ifneq ($(CONFIG_OF),)
+      FEATURES += dt
+    endif
+    ifneq ($(CONFIG_GENERIC_GPIO)$(CONFIG_GPIOLIB),)
       FEATURES += gpio
     endif
     ifneq ($(CONFIG_PCI),)
@@ -191,21 +206,69 @@ ifeq ($(DUMP),1)
     # remove duplicates
     FEATURES:=$(sort $(FEATURES))
   endif
-  DEFAULT_CFLAGS_i386=-O2 -pipe -march=i486 -fno-caller-saves
-  DEFAULT_CFLAGS_x86_64=-O2 -pipe -march=athlon64 -fno-caller-saves
-  DEFAULT_CFLAGS_m68k=-Os -pipe -mcfv4e -fno-caller-saves
-  DEFAULT_CFLAGS_mips=-Os -pipe -mips32 -mtune=mips32 -fno-caller-saves -mno-branch-likely
-  DEFAULT_CFLAGS_mipsel=$(DEFAULT_CFLAGS_mips)
-  DEFAULT_CFLAGS_mips64=-Os -pipe -mips64 -mtune=mips64 -mabi=64 -fno-caller-saves
-  DEFAULT_CFLAGS_mips64el=$(DEFAULT_CFLAGS_mips64)
-  DEFAULT_CFLAGS_sparc=-Os -pipe -mcpu=ultrasparc -fno-caller-saves
-  DEFAULT_CFLAGS_arm=-Os -pipe -march=armv5te -mtune=xscale -fno-caller-saves
-  DEFAULT_CFLAGS_armeb=$(DEFAULT_CFLAGS_arm)
-  DEFAULT_CFLAGS=$(if $(DEFAULT_CFLAGS_$(ARCH)),$(DEFAULT_CFLAGS_$(ARCH)),-Os -pipe -fno-caller-saves)
+  CPU_CFLAGS = -Os -pipe
+  ifneq ($(findstring mips,$(ARCH)),)
+    ifneq ($(findstring mips64,$(ARCH)),)
+      CPU_TYPE ?= mips64
+    else
+      CPU_TYPE ?= mips32
+    endif
+    CPU_CFLAGS += -mno-branch-likely
+    CPU_CFLAGS_mips32 = -mips32 -mtune=mips32
+    CPU_CFLAGS_mips32r2 = -mips32r2 -mtune=mips32r2
+    CPU_CFLAGS_mips64 = -mips64 -mtune=mips64 -mabi=64
+    CPU_CFLAGS_24kec = -mips32r2 -mtune=24kec
+    CPU_CFLAGS_34kc = -mips32r2 -mtune=34kc
+    CPU_CFLAGS_74kc = -mips32r2 -mtune=74kc
+    CPU_CFLAGS_octeon = -march=octeon -mabi=64
+    CPU_CFLAGS_dsp = -mdsp
+    CPU_CFLAGS_dsp2 = -mdspr2
+  endif
+  ifeq ($(ARCH),i386)
+    CPU_TYPE ?= i486
+    CPU_CFLAGS_i486 = -march=i486
+    CPU_CFLAGS_geode = -march=geode -mmmx -m3dnow
+  endif
+  ifneq ($(findstring arm,$(ARCH)),)
+    CPU_TYPE ?= xscale
+    CPU_CFLAGS_arm920t = -march=armv4t -mtune=arm920t
+    CPU_CFLAGS_arm926ej-s = -march=armv5te -mtune=arm926ej-s
+    CPU_CFLAGS_arm1136j-s = -march=armv6 -mtune=arm1136j-s
+    CPU_CFLAGS_arm1176jzf-s = -march=armv6 -mtune=arm1176jzf-s
+    CPU_CFLAGS_cortex-a5 = -march=armv7-a -mtune=cortex-a5
+    CPU_CFLAGS_cortex-a7 = -march=armv7-a -mtune=cortex-a7
+    CPU_CFLAGS_cortex-a8 = -march=armv7-a -mtune=cortex-a8
+    CPU_CFLAGS_cortex-a9 = -march=armv7-a -mtune=cortex-a9
+    CPU_CFLAGS_cortex-a15 = -march=armv7-a -mtune=cortex-a15
+    CPU_CFLAGS_fa526 = -march=armv4 -mtune=fa526
+    CPU_CFLAGS_mpcore = -march=armv6k -mtune=mpcore
+    CPU_CFLAGS_xscale = -march=armv5te -mtune=xscale
+    ifeq ($(CONFIG_SOFT_FLOAT),)
+      CPU_CFLAGS_neon = -mfpu=neon
+      CPU_CFLAGS_vfp = -mfpu=vfp
+      CPU_CFLAGS_vfpv3 = -mfpu=vfpv3-d16
+    endif
+  endif
+  ifeq ($(ARCH),powerpc)
+    CPU_CFLAGS_603e:=-mcpu=603e
+    CPU_CFLAGS_8540:=-mcpu=8540
+    CPU_CFLAGS_405:=-mcpu=405
+    CPU_CFLAGS_440:=-mcpu=440
+  endif
+  ifeq ($(ARCH),sparc)
+    CPU_TYPE = sparc
+    CPU_CFLAGS_ultrasparc = -mcpu=ultrasparc
+  endif
+  ifeq ($(ARCH),aarch64)
+    CPU_TYPE ?= armv8-a
+    CPU_CFLAGS_armv8-a = -mcpu=armv8-a
+  endif
+  DEFAULT_CFLAGS=$(strip $(CPU_CFLAGS) $(CPU_CFLAGS_$(CPU_TYPE)) $(CPU_CFLAGS_$(CPU_SUBTYPE)))
 endif
 
 define BuildTargets/DumpCurrent
   .PHONY: dumpinfo
+  dumpinfo : export DESCRIPTION=$$(Target/Description)
   dumpinfo:
 	@echo 'Target: $(TARGETID)'; \
 	 echo 'Target-Board: $(BOARD)'; \
@@ -216,14 +279,15 @@ define BuildTargets/DumpCurrent
 	 echo 'Target-Features: $(FEATURES)'; \
 	 echo 'Target-Depends: $(DEPENDS)'; \
 	 echo 'Target-Optimization: $(if $(CFLAGS),$(CFLAGS),$(DEFAULT_CFLAGS))'; \
+	 echo 'CPU-Type: $(CPU_TYPE)$(if $(CPU_SUBTYPE),+$(CPU_SUBTYPE))'; \
 	 echo 'Linux-Version: $(LINUX_VERSION)'; \
 	 echo 'Linux-Release: $(LINUX_RELEASE)'; \
 	 echo 'Linux-Kernel-Arch: $(LINUX_KARCH)'; \
-	$(if $(SUBTARGET),,$(if $(DEFAULT_SUBTARGET), echo 'Default-Subtarget: $(DEFAULT_SUBTARGET)'; ))
+	$(if $(SUBTARGET),,$(if $(DEFAULT_SUBTARGET), echo 'Default-Subtarget: $(DEFAULT_SUBTARGET)'; )) \
 	 echo 'Target-Description:'; \
-	 $(SH_FUNC) getvar $(call shvar,Target/Description); \
+	 echo "$$$$DESCRIPTION"; \
 	 echo '@@'; \
-	 echo 'Default-Packages: $(DEFAULT_PACKAGES)'; \
+	 echo 'Default-Packages: $(DEFAULT_PACKAGES) $(call extra_packages,$(DEFAULT_PACKAGES))'; \
 	 $(DUMPINFO)
 	$(if $(SUBTARGET),,@$(foreach SUBTARGET,$(SUBTARGETS),$(SUBMAKE) -s DUMP=1 SUBTARGET=$(SUBTARGET); ))
 endef

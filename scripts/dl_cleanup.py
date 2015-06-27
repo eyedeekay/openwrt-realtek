@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-# OpenWRT download directory cleanup utility.
+# OpenWrt download directory cleanup utility.
 # Delete all but the very last version of the program tarballs.
 #
 # Copyright (C) 2010 Michael Buesch <mb@bu3sch.de>
@@ -87,9 +87,9 @@ extensions = (
 )
 
 versionRegex = (
-	(re.compile(r"(.+)[-_]([0-9a-fA-F]{40,40})"), parseVer_GIT),		# xxx-GIT_SHASUM
 	(re.compile(r"(.+)[-_](\d+)\.(\d+)\.(\d+)\.(\d+)"), parseVer_1234),	# xxx-1.2.3.4
 	(re.compile(r"(.+)[-_](\d\d\d\d)-?(\d\d)-?(\d\d)"), parseVer_ymd),	# xxx-YYYY-MM-DD
+	(re.compile(r"(.+)[-_]([0-9a-fA-F]{40,40})"), parseVer_GIT),		# xxx-GIT_SHASUM
 	(re.compile(r"(.+)[-_](\d+)\.(\d+)\.(\d+)(\w?)"), parseVer_123),	# xxx-1.2.3a
 	(re.compile(r"(.+)[-_](\d+)_(\d+)_(\d+)"), parseVer_123),		# xxx-1_2_3
 	(re.compile(r"(.+)[-_](\d+)\.(\d+)(\w?)"), parseVer_12),		# xxx-1.2a
@@ -146,7 +146,7 @@ class Entry:
 		return self.version >= y.version
 
 def usage():
-	print "OpenWRT download directory cleanup utility"
+	print "OpenWrt download directory cleanup utility"
 	print "Usage: " + sys.argv[0] + " [OPTIONS] <path/to/dl>"
 	print ""
 	print " -d|--dry-run            Do a dry-run. Don't delete any files"

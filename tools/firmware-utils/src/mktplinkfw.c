@@ -30,21 +30,31 @@
 #define ALIGN(x,a) ({ typeof(a) __a = (a); (((x) + __a - 1) & ~(__a - 1)); })
 
 #define HEADER_VERSION_V1	0x01000000
+#define HWID_ANTMINER_S1	0x04440001
+#define HWID_GL_INET_V1		0x08000001
+#define HWID_GS_OOLITE_V1	0x3C000101
+#define HWID_TL_MR10U_V1	0x00100101
+#define HWID_TL_MR13U_V1	0x00130101
 #define HWID_TL_MR3020_V1	0x30200001
 #define HWID_TL_MR3220_V1	0x32200001
 #define HWID_TL_MR3220_V2	0x32200002
 #define HWID_TL_MR3420_V1	0x34200001
 #define HWID_TL_MR3420_V2	0x34200002
 #define HWID_TL_WA701N_V1	0x07010001
+#define HWID_TL_WA701N_V2	0x07010002
+#define HWID_TL_WA7210N_V2	0x72100002
 #define HWID_TL_WA7510N_V1	0x75100001
 #define HWID_TL_WA801ND_V1	0x08010001
 #define HWID_TL_WA830RE_V1	0x08300010
 #define HWID_TL_WA830RE_V2	0x08300002
+#define HWID_TL_WA801ND_V2	0x08010002
 #define HWID_TL_WA901ND_V1	0x09010001
 #define HWID_TL_WA901ND_V2	0x09010002
+#define HWID_TL_WDR4300_V1_IL	0x43008001
 #define HWID_TL_WDR4900_V1	0x49000001
 #define HWID_TL_WR703N_V1	0x07030101
 #define HWID_TL_WR720N_V3	0x07200103
+#define HWID_TL_WR720N_V4	0x07200104
 #define HWID_TL_WR741ND_V1	0x07410001
 #define HWID_TL_WR741ND_V4	0x07410004
 #define HWID_TL_WR740N_V1	0x07400001
@@ -58,6 +68,7 @@
 #define HWID_TL_WR941ND_V2	0x09410002
 #define HWID_TL_WR941ND_V4	0x09410004
 #define HWID_TL_WR1043ND_V1	0x10430001
+#define HWID_TL_WR1043ND_V2	0x10430002
 #define HWID_TL_WR1041N_V2	0x10410002
 #define HWID_TL_WR2543N_V1	0x25430001
 
@@ -139,8 +150,11 @@ static uint32_t rootfs_align;
 static struct file_info boot_info;
 static int combined;
 static int strip_padding;
+static int ignore_size;
 static int add_jffs2_eof;
 static unsigned char jffs2_eof_mark[4] = {0xde, 0xad, 0xc0, 0xde};
+static uint32_t fw_max_len;
+static uint32_t reserved_space;
 
 static struct file_info inspect_info;
 static int extract = 0;
@@ -181,6 +195,18 @@ static struct flash_layout layouts[] = {
 		.kernel_ep	= 0x80060000,
 		.rootfs_ofs	= 0x100000,
 	}, {
+		.id		= "16M",
+		.fw_max_len	= 0xf80000,
+		.kernel_la	= 0x80060000,
+		.kernel_ep	= 0x80060000,
+		.rootfs_ofs	= 0x140000,
+	}, {
+		.id		= "16Mlzma",
+		.fw_max_len	= 0xf80000,
+		.kernel_la	= 0x80060000,
+		.kernel_ep	= 0x80060000,
+		.rootfs_ofs	= 0x100000,
+	}, {
 		.id		= "16Mppc",
 		.fw_max_len	= 0xf80000,
 		.kernel_la	= 0x00000000,
@@ -193,6 +219,16 @@ static struct flash_layout layouts[] = {
 
 static struct board_info boards[] = {
 	{
+		.id		= "TL-MR10Uv1",
+		.hw_id		= HWID_TL_MR10U_V1,
+		.hw_rev		= 1,
+		.layout_id	= "4Mlzma",
+	}, {
+		.id		= "TL-MR13Uv1",
+		.hw_id		= HWID_TL_MR13U_V1,
+		.hw_rev		= 1,
+		.layout_id	= "4Mlzma",
+	}, {
 		.id		= "TL-MR3020v1",
 		.hw_id		= HWID_TL_MR3020_V1,
 		.hw_rev		= 1,
@@ -223,6 +259,16 @@ static struct board_info boards[] = {
 		.hw_rev		= 1,
 		.layout_id	= "4M",
 	}, {
+		.id		= "TL-WA701Nv2",
+		.hw_id		= HWID_TL_WA701N_V2,
+		.hw_rev		= 1,
+		.layout_id	= "4Mlzma",
+	}, {
+		.id		= "TL-WA7210N",
+		.hw_id		= HWID_TL_WA7210N_V2,
+		.hw_rev		= 2,
+		.layout_id	= "4Mlzma",
+	}, {
 		.id		= "TL-WA7510N",
 		.hw_id		= HWID_TL_WA7510N_V1,
 		.hw_rev		= 1,
@@ -243,6 +289,11 @@ static struct board_info boards[] = {
 		.hw_rev		= 1,
 		.layout_id	= "4M",
 	}, {
+		.id             = "TL-WA801NDv2",
+		.hw_id          = HWID_TL_WA801ND_V2,
+		.hw_rev         = 1,
+		.layout_id	= "4Mlzma",
+	}, {
 		.id		= "TL-WA901NDv1",
 		.hw_id		= HWID_TL_WA901ND_V1,
 		.hw_rev		= 1,
@@ -252,6 +303,11 @@ static struct board_info boards[] = {
 		.hw_id          = HWID_TL_WA901ND_V2,
 		.hw_rev         = 1,
 		.layout_id	= "4M",
+	}, {
+		.id             = "TL-WDR4300v1",
+		.hw_id          = HWID_TL_WDR4300_V1_IL,
+		.hw_rev         = 1,
+		.layout_id	= "8Mlzma",
 	}, {
 		.id             = "TL-WDR4900v1",
 		.hw_id          = HWID_TL_WDR4900_V1,
@@ -328,6 +384,11 @@ static struct board_info boards[] = {
 		.hw_rev		= 1,
 		.layout_id	= "8M",
 	}, {
+		.id		= "TL-WR1043NDv2",
+		.hw_id		= HWID_TL_WR1043ND_V2,
+		.hw_rev		= 1,
+		.layout_id	= "8Mlzma",
+	}, {
 		.id		= "TL-WR2543Nv1",
 		.hw_id		= HWID_TL_WR2543N_V1,
 		.hw_rev		= 1,
@@ -342,6 +403,26 @@ static struct board_info boards[] = {
 		.hw_id		= HWID_TL_WR720N_V3,
 		.hw_rev		= 1,
 		.layout_id	= "4Mlzma",
+	}, {
+		.id		= "TL-WR720Nv4",
+		.hw_id		= HWID_TL_WR720N_V4,
+		.hw_rev		= 1,
+		.layout_id	= "4Mlzma",
+	}, {
+		.id		= "GL-INETv1",
+		.hw_id		= HWID_GL_INET_V1,
+		.hw_rev		= 1,
+		.layout_id	= "8Mlzma",
+	}, {
+		.id		= "GS-OOLITEv1",
+		.hw_id		= HWID_GS_OOLITE_V1,
+		.hw_rev		= 1,
+		.layout_id	= "16Mlzma",
+	}, {
+		.id		= "ANTMINER-S1",
+		.hw_id		= HWID_ANTMINER_S1,
+		.hw_rev		= 1,
+		.layout_id	= "8Mlzma",
 	}, {
 		/* terminating entry */
 	}
@@ -433,12 +514,14 @@ static void usage(int status)
 "  -R <offset>     overwrite rootfs offset with <offset> (hexval prefixed with 0x)\n"
 "  -o <file>       write output to the file <file>\n"
 "  -s              strip padding from the end of the image\n"
+"  -S              ignore firmware size limit (only for combined images)\n"
 "  -j              add jffs2 end-of-filesystem markers\n"
 "  -N <vendor>     set image vendor to <vendor>\n"
 "  -V <version>    set image version to <version>\n"
 "  -v <version>    set firmware version to <version>\n"
 "  -i <file>       inspect given firmware file <file>\n"
 "  -x              extract kernel and rootfs while inspecting (requires -i)\n"
+"  -X <size>       reserve <size> bytes in the firmware image (hexval prefixed with 0x)\n"
 "  -h              show this screen\n"
 	);
 
@@ -555,6 +638,13 @@ static int check_options(void)
 	if (!rootfs_ofs)
 		rootfs_ofs = layout->rootfs_ofs;
 
+	if (reserved_space > layout->fw_max_len) {
+		ERR("reserved space is not valid");
+		return -1;
+	}
+
+	fw_max_len = layout->fw_max_len - reserved_space;
+
 	if (kernel_info.file_name == NULL) {
 		ERR("no kernel image specified");
 		return -1;
@@ -568,9 +658,14 @@ static int check_options(void)
 
 	if (combined) {
 		if (kernel_info.file_size >
-		    layout->fw_max_len - sizeof(struct fw_header)) {
-			ERR("kernel image is too big");
-			return -1;
+		    fw_max_len - sizeof(struct fw_header)) {
+			if (!ignore_size) {
+				ERR("kernel image is too big");
+				return -1;
+			}
+			layout->fw_max_len = sizeof(struct fw_header) +
+					     kernel_info.file_size +
+					     reserved_space;
 		}
 	} else {
 		if (rootfs_info.file_name == NULL) {
@@ -590,7 +685,7 @@ static int check_options(void)
 			DBG("kernel length aligned to %u", kernel_len);
 
 			if (kernel_len + rootfs_info.file_size >
-			    layout->fw_max_len - sizeof(struct fw_header)) {
+			    fw_max_len - sizeof(struct fw_header)) {
 				ERR("images are too big");
 				return -1;
 			}
@@ -602,7 +697,7 @@ static int check_options(void)
 			}
 
 			if (rootfs_info.file_size >
-			    (layout->fw_max_len - rootfs_ofs)) {
+			    (fw_max_len - rootfs_ofs)) {
 				ERR("rootfs image is too big");
 				return -1;
 			}
@@ -1005,7 +1100,7 @@ int main(int argc, char *argv[])
 	while ( 1 ) {
 		int c;
 
-		c = getopt(argc, argv, "a:B:H:E:F:L:V:N:W:ci:k:r:R:o:xhsjv:");
+		c = getopt(argc, argv, "a:B:H:E:F:L:V:N:W:ci:k:r:R:o:xX:hsSjv:");
 		if (c == -1)
 			break;
 
@@ -1058,6 +1153,9 @@ int main(int argc, char *argv[])
 		case 's':
 			strip_padding = 1;
 			break;
+		case 'S':
+			ignore_size = 1;
+			break;
 		case 'i':
 			inspect_info.file_name = optarg;
 			break;
@@ -1069,6 +1167,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'h':
 			usage(EXIT_SUCCESS);
+			break;
+		case 'X':
+			sscanf(optarg, "0x%x", &reserved_space);
 			break;
 		default:
 			usage(EXIT_FAILURE);

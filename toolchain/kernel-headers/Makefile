@@ -31,6 +31,10 @@ ifeq ($(strip $(BOARD)),uml)
   LINUX_KARCH:=$(subst x86_64,x86,$(subst i386,x86,$(ARCH)))
 endif
 
+ifeq ($(CONFIG_TARGET_realtek),y)
+LINUX_KARCH:=$(subst lexra,mips,$(ARCH))
+endif
+
 HOST_EXTRACFLAGS=
 
 LINUX_HAS_HEADERS_INSTALL:=y
@@ -57,18 +61,10 @@ ifneq ($(CONFIG_mips)$(CONFIG_mipsel),)
 	$(CP) \
 		$(HOST_BUILD_DIR)/arch/mips/include/asm/asm.h \
 		$(HOST_BUILD_DIR)/arch/mips/include/asm/regdef.h \
+		$(if $(call kernel_patchver_ge,3.15.0),$(HOST_BUILD_DIR)/arch/mips/include/asm/asm-eva.h) \
 		$(BUILD_DIR_TOOLCHAIN)/linux-dev/include/asm/
   endef
 endif
-
-define Host/Configure/post/cris
-	$(CP) \
-		$(HOST_BUILD_DIR)/include/linux/user.h \
-		$(BUILD_DIR_TOOLCHAIN)/linux-dev/include/linux/
-	ln -snf $(BUILD_DIR_TOOLCHAIN)/linux-dev/include/arch-v10/arch \
-		$(BUILD_DIR_TOOLCHAIN)/linux-dev/include/arch
-	$(SED) '/#include <asm\/page\.h>/d' $(BUILD_DIR_TOOLCHAIN)/linux-dev/include/asm/user.h
-endef
 
 define Host/Configure/post/mips
 	$(call Host/Configure/lzma)

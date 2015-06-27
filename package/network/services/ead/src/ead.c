@@ -30,17 +30,15 @@
 #include <t_sha.h>
 #include <t_defines.h>
 #include <t_server.h>
+#include <net/if.h>
 
 #include "list.h"
 #include "ead.h"
 #include "ead-pcap.h"
 #include "ead-crypt.h"
+#include "libbridge.h"
 
 #include "filter.c"
-
-#ifdef linux
-#include "libbridge_init.c"
-#endif
 
 #ifdef linux
 #include <linux/if_packet.h>
@@ -74,10 +72,8 @@ struct ead_instance {
 	char ifname[16];
 	int pid;
 	char id;
-#ifdef linux
 	char bridge[16];
 	bool br_check;
-#endif
 };
 
 static char ethmac[6] = "\x00\x13\x37\x00\x00\x00"; /* last 3 bytes will be randomized */
@@ -120,8 +116,8 @@ set_recv_type(pcap_t *p, bool rx)
 #ifdef PACKET_RECV_TYPE
 	struct sockaddr_ll sll;
 	struct ifreq ifr;
-	int ifindex, mask;
-	int fd, ret;
+	int mask;
+	int fd;
 
 	fd = pcap_get_selectable_fd(p);
 	if (fd < 0)
@@ -132,7 +128,7 @@ set_recv_type(pcap_t *p, bool rx)
 	else
 		mask = 0;
 
-	ret = setsockopt(fd, SOL_PACKET, PACKET_RECV_TYPE, &mask, sizeof(mask));
+	setsockopt(fd, SOL_PACKET, PACKET_RECV_TYPE, &mask, sizeof(mask));
 #endif
 }
 
@@ -696,13 +692,10 @@ ead_pcap_reopen(bool first)
 
 	pcap_fp_rx = NULL;
 	do {
-#ifdef linux
 		if (instance->bridge[0]) {
 			pcap_fp_rx = ead_open_pcap(instance->bridge, errbuf, 1);
 			pcap_fp = ead_open_pcap(instance->ifname, errbuf, 0);
-		} else
-#endif
-		{
+		} else {
 			pcap_fp = ead_open_pcap(instance->ifname, errbuf, 1);
 		}
 
@@ -836,12 +829,11 @@ server_handle_sigint(int sig)
 	exit(1);
 }
 
-#ifdef linux
 static int
 check_bridge_port(const char *br, const char *port, void *arg)
 {
 	struct ead_instance *in;
-	struct list_head *p, *tmp;
+	struct list_head *p;
 
 	list_for_each(p, &instances) {
 		in = list_entry(p, struct ead_instance, list);
@@ -866,14 +858,12 @@ check_bridge(const char *name, void *arg)
 	br_foreach_port(name, check_bridge_port, arg);
 	return 0;
 }
-#endif
 
 static void
 check_all_interfaces(void)
 {
-#ifdef linux
 	struct ead_instance *in;
-	struct list_head *p, *tmp;
+	struct list_head *p;
 
 	br_foreach_bridge(check_bridge, NULL);
 
@@ -889,7 +879,6 @@ check_all_interfaces(void)
 			stop_server(in, false);
 		}
 	}
-#endif
 }
 
 
@@ -973,9 +962,7 @@ int main(int argc, char **argv)
 	nid = *(((u16_t *) ethmac) + 2);
 
 	start_servers(false);
-#ifdef linux
 	br_init();
-#endif
 	tv.tv_sec = 1;
 	tv.tv_usec = 0;
 	while (1) {
@@ -983,9 +970,7 @@ int main(int argc, char **argv)
 		start_servers(true);
 		sleep(1);
 	}
-#ifdef linux
 	br_shutdown();
-#endif
 
 	return 0;
 }

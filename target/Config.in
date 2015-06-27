@@ -39,6 +39,9 @@ config RTC_SUPPORT
 config BIG_ENDIAN
 	bool
 
+config USES_DEVICETREE
+	bool
+
 config USES_INITRAMFS
 	bool
 
@@ -46,6 +49,9 @@ config USES_SQUASHFS
 	bool
 
 config USES_JFFS2
+	bool
+
+config USES_JFFS2_NAND
 	bool
 
 config USES_EXT4
@@ -59,8 +65,12 @@ config USES_CPIOGZ
 
 config USES_UBIFS
 	bool
+	select NAND_SUPPORT
 
 config PROFILE_KCONFIG
+	bool
+
+config LOW_MEMORY_FOOTPRINT
 	bool
 
 config NOMMU
@@ -70,10 +80,25 @@ config HAS_MIPS16
 	depends on (mips || mipsel || mips64 || mips64el)
 	bool
 
+config RFKILL_SUPPORT
+	bool
+
+config NAND_SUPPORT
+	bool
+
 config ARCH_64BIT
 	bool
 
 # Architecture selection
+
+config aarch64
+	select ARCH_64BIT
+	bool
+
+config aarch64_be
+	select ARCH_64BIT
+	select BIG_ENDIAN
+	bool
 
 config arm
 	bool
@@ -94,13 +119,6 @@ config arm_v6
 config arm_v7
 	bool
 
-config avr32
-	select BIG_ENDIAN
-	bool
-
-config cris
-	bool
-
 config i386
 	bool
 
@@ -108,6 +126,10 @@ config i686
 	bool 
 
 config m68k
+	bool
+
+config lexra
+	select BIG_ENDIAN
 	bool
 
 config mips
@@ -159,10 +181,10 @@ config x86_64
 
 config ARCH
 	string
+	default "aarch64"   if aarch64
+	default "aarch64_be" if aarch64_be
 	default "arm"       if arm
 	default "armeb"     if armeb
-	default "avr32"     if avr32
-	default "cris"      if cris
 	default "i386"      if i386
 	default "i686"      if i686
 	default "m68k"      if m68k
@@ -177,4 +199,5 @@ config ARCH
 	default "sh4eb"     if sh4eb
 	default "sparc"     if sparc
 	default "x86_64"    if x86_64
+	default	"mips"	    if lexra
 

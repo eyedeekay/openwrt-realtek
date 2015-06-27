@@ -36,7 +36,8 @@
 #define AR7240_FLOOD_MASK_BROAD_TO_CPU	BIT(26)
 
 #define AR7240_REG_GLOBAL_CTRL		0x30
-#define AR7240_GLOBAL_CTRL_MTU_M	BITM(12)
+#define AR7240_GLOBAL_CTRL_MTU_M	BITM(11)
+#define AR9340_GLOBAL_CTRL_MTU_M	BITM(14)
 
 #define AR7240_REG_VTU			0x0040
 #define   AR7240_VTU_OP			BITM(3)
@@ -444,7 +445,7 @@ static int __ar7240sw_reg_wait(struct mii_bus *mii, u32 reg, u32 mask, u32 val,
 		if ((t & mask) == val)
 			return 0;
 
-		msleep(1);
+		usleep_range(1000, 2000);
 	}
 
 	return -ETIMEDOUT;
@@ -586,6 +587,11 @@ static void ar7240sw_setup(struct ar7240sw *as)
 				 AR934X_FLOOD_MASK_BC_DP(0) |
 				 AR934X_FLOOD_MASK_MC_DP(0));
 
+		/* setup MTU */
+		ar7240sw_reg_rmw(mii, AR7240_REG_GLOBAL_CTRL,
+				 AR9340_GLOBAL_CTRL_MTU_M,
+				 AR9340_GLOBAL_CTRL_MTU_M);
+
 		/* Enable MIB counters */
 		ar7240sw_reg_set(mii, AR7240_REG_MIB_FUNCTION0,
 				 AR934X_MIB_ENABLE);
@@ -601,14 +607,40 @@ static void ar7240sw_setup(struct ar7240sw *as)
 		/* Enable Broadcast frames transmitted to the CPU */
 		ar7240sw_reg_set(mii, AR7240_REG_FLOOD_MASK,
 				 AR7240_FLOOD_MASK_BROAD_TO_CPU);
-	}
 
-	/* setup MTU */
-	ar7240sw_reg_rmw(mii, AR7240_REG_GLOBAL_CTRL, AR7240_GLOBAL_CTRL_MTU_M,
-			 1536);
+		/* setup MTU */
+		ar7240sw_reg_rmw(mii, AR7240_REG_GLOBAL_CTRL,
+				 AR7240_GLOBAL_CTRL_MTU_M,
+				 AR7240_GLOBAL_CTRL_MTU_M);
+	}
 
 	/* setup Service TAG */
 	ar7240sw_reg_rmw(mii, AR7240_REG_SERVICE_TAG, AR7240_SERVICE_TAG_M, 0);
+}
+
+/* inspired by phy_poll_reset in drivers/net/phy/phy_device.c */
+static int
+ar7240sw_phy_poll_reset(struct mii_bus *bus)
+{
+	const unsigned int sleep_msecs = 20;
+	int ret, elapsed, i;
+
+	for (elapsed = sleep_msecs; elapsed <= 600;
+	     elapsed += sleep_msecs) {
+		msleep(sleep_msecs);
+		for (i = 0; i < AR7240_NUM_PHYS; i++) {
+			ret = ar7240sw_phy_read(bus, i, MII_BMCR);
+			if (ret < 0)
+				return ret;
+			if (ret & BMCR_RESET)
+				break;
+			if (i == AR7240_NUM_PHYS - 1) {
+				usleep_range(1000, 2000);
+				return 0;
+			}
+		}
+	}
+	return -ETIMEDOUT;
 }
 
 static int ar7240sw_reset(struct ar7240sw *as)
@@ -622,7 +654,7 @@ static int ar7240sw_reset(struct ar7240sw *as)
 		ar7240sw_disable_port(as, i);
 
 	/* Wait for transmit queues to drain. */
-	msleep(2);
+	usleep_range(2000, 3000);
 
 	/* Reset the switch. */
 	ar7240sw_reg_write(mii, AR7240_REG_MASK_CTRL,
@@ -639,7 +671,9 @@ static int ar7240sw_reset(struct ar7240sw *as)
 		ar7240sw_phy_write(mii, i, MII_BMCR,
 				   BMCR_RESET | BMCR_ANENABLE);
 	}
-	msleep(1000);
+	ret = ar7240sw_phy_poll_reset(mii);
+	if (ret)
+		return ret;
 
 	ar7240sw_setup(as);
 	return ret;
@@ -1043,7 +1077,7 @@ static struct ar7240sw *ar7240_probe(struct ag71xx *ag)
 	if ((phy_id1 != AR7240_PHY_ID1 || phy_id2 != AR7240_PHY_ID2) &&
 	    (phy_id1 != AR934X_PHY_ID1 || phy_id2 != AR934X_PHY_ID2)) {
 		pr_err("%s: unknown phy id '%04x:%04x'\n",
-		       ag->dev->name, phy_id1, phy_id2);
+		       dev_name(&mii->dev), phy_id1, phy_id2);
 		return NULL;
 	}
 
@@ -1074,7 +1108,7 @@ static struct ar7240sw *ar7240_probe(struct ag71xx *ag)
 					 AR934X_OPER_MODE0_PHY_MII_EN);
 		} else {
 			pr_err("%s: invalid PHY interface mode\n",
-			       ag->dev->name);
+			       dev_name(&mii->dev));
 			goto err_free;
 		}
 
@@ -1087,7 +1121,7 @@ static struct ar7240sw *ar7240_probe(struct ag71xx *ag)
 		}
 	} else {
 		pr_err("%s: unsupported chip, ctrl=%08x\n",
-			ag->dev->name, ctrl);
+			dev_name(&mii->dev), ctrl);
 		goto err_free;
 	}
 
@@ -1098,7 +1132,7 @@ static struct ar7240sw *ar7240_probe(struct ag71xx *ag)
 	if (register_switch(&as->swdev, ag->dev) < 0)
 		goto err_free;
 
-	pr_info("%s: Found an %s\n", ag->dev->name, swdev->name);
+	pr_info("%s: Found an %s\n", dev_name(&mii->dev), swdev->name);
 
 	/* initialize defaults */
 	for (i = 0; i < AR7240_MAX_VLANS; i++)

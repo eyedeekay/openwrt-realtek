@@ -1,22 +1,42 @@
-USE_REFRESH=1
+platform_export_bootpart() {
+	local cmdline uuid disk
 
-x86_get_rootfs() {
-	local rootfsdev
-	local rootfstype
-	
-	rootfstype="$(awk 'BEGIN { RS=" "; FS="="; } ($1 == "rootfstype") { print $2 }' < /proc/cmdline)"
-	case "$rootfstype" in
-		squashfs|jffs2)
-			rootfsdev="$(awk 'BEGIN { RS=" "; FS="="; } ($1 == "block2mtd.block2mtd") { print substr($2,1,index($2, ",")-1) }' < /proc/cmdline)";;
-		ext4)
-			rootfsdev="$(awk 'BEGIN { RS=" "; FS="="; } ($1 == "root") { print $2 }' < /proc/cmdline)";;
-	esac
-		
-	echo "$rootfstype:$rootfsdev"
+	if read cmdline < /proc/cmdline; then
+		case "$cmdline" in
+			*block2mtd=*)
+				disk="${cmdline##*block2mtd=}"
+				disk="${disk%%,*}"
+			;;
+			*root=*)
+				disk="${cmdline##*root=}"
+				disk="${disk%% *}"
+			;;
+		esac
+
+		case "$disk" in
+			PARTUUID=[a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9]-02)
+				uuid="${disk#PARTUUID=}"
+				uuid="${uuid%-02}"
+				for disk in /dev/[hsv]d[a-z]; do
+					set -- $(dd if=$disk bs=1 skip=440 count=4 2>/dev/null | hexdump -v -e '4/1 "%02x "')
+					if [ "$4$3$2$1" = "$uuid" ]; then
+						export BOOTPART="${disk}1"
+						return 0
+					fi
+				done
+			;;
+			/dev/*)
+				export BOOTPART="${disk%[0-9]}1"
+				return 0
+			;;
+		esac
+	fi
+
+	return 1
 }
 
 platform_check_image() {
-	[ "$ARGC" -gt 1 ] && return 1
+	[ "$#" -gt 1 ] && return 1
 
 	case "$(get_magic_word "$1")" in
 		eb48|eb63) return 0;;
@@ -27,24 +47,20 @@ platform_check_image() {
 	esac
 }
 
-platform_refresh_partitions() {
-	return 0
-}
-
 platform_copy_config() {
-	local rootfs="$(x86_get_rootfs)"
-	local rootfsdev="${rootfs##*:}"
-	
-	mount -t ext4 -o rw,noatime "${rootfsdev%[0-9]}1" /mnt
-	cp -af "$CONF_TAR" /mnt/
-	umount /mnt
+	if [ -b "$BOOTPART" ]; then
+		mount -t ext4 -o rw,noatime "$BOOTPART" /mnt
+		cp -af "$CONF_TAR" /mnt/
+		umount /mnt
+	fi
 }
 
 platform_do_upgrade() {
-	local rootfs="$(x86_get_rootfs)"
-	local rootfsdev="${rootfs##*:}"
+	platform_export_bootpart
 
-	sync
-	[ -b ${rootfsdev%[0-9]} ] && get_image "$@" | dd of=${rootfsdev%[0-9]} bs=4096 conv=fsync
-	sleep 1
+	if [ -b "${BOOTPART%[0-9]}" ]; then
+		sync
+		get_image "$@" | dd of="${BOOTPART%[0-9]}" bs=4096 conv=fsync
+		sleep 1
+	fi
 }

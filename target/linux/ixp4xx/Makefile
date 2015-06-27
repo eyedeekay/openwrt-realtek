@@ -13,10 +13,11 @@ FEATURES:=squashfs
 MAINTAINER:=Imre Kaloz <kaloz@openwrt.org>
 SUBTARGETS=generic harddisk
 
-LINUX_VERSION:=3.3.8
+KERNEL_PATCHVER:=3.18
 
 include $(INCLUDE_DIR)/target.mk
 
 DEFAULT_PACKAGES += ixp4xx-microcode fconfig
+KERNELNAME:=zImage
 
 $(eval $(call BuildTarget))

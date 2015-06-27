@@ -11,6 +11,7 @@ PKG_NAME:=swconfig
 PKG_RELEASE:=10
 
 PKG_MAINTAINER:=Felix Fietkau <nbd@openwrt.org>
+PKG_LICENSE:=GPL-2.0
 
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/kernel.mk
@@ -18,7 +19,7 @@ include $(INCLUDE_DIR)/kernel.mk
 define Package/swconfig
   SECTION:=base
   CATEGORY:=Base system
-  DEPENDS:=@!TARGET_brcm47xx +libuci +libnl-tiny
+  DEPENDS:=+libuci +libnl-tiny
   TITLE:=Switch configuration utility
 endef
 

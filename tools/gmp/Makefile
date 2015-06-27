@@ -7,11 +7,11 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=gmp
-PKG_VERSION:=5.1.1
+PKG_VERSION:=5.1.3
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.xz
 PKG_SOURCE_URL:=@GNU/gmp/
-PKG_MD5SUM:=485b1296e6287fa381e6015b19767989
+PKG_MD5SUM:=e5fe367801ff067b923d1e6a126448aa
 
 HOST_FIXUP:=autoreconf
 
@@ -24,7 +24,12 @@ unexport CFLAGS
 HOST_CONFIGURE_ARGS += \
 	--enable-static \
 	--disable-shared \
+	--disable-assembly \
 	--enable-cxx \
 	--enable-mpbsd
+
+ifeq ($(GNU_HOST_NAME),x86_64-linux-gnux32)
+HOST_CONFIGURE_ARGS += ABI=x32
+endif
 
 $(eval $(call HostBuild))

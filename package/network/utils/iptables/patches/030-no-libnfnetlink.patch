@@ -1,8 +1,8 @@
 --- a/configure
 +++ b/configure
-@@ -12173,77 +12173,7 @@ $as_echo "no" >&6; }
- 	fi
+@@ -12367,77 +12367,7 @@ fi
  fi
+ 
  
 -pkg_failed=no
 -{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libnfnetlink" >&5
@@ -81,9 +81,9 @@
  else
 --- a/configure.ac
 +++ b/configure.ac
-@@ -89,9 +89,7 @@ AM_CONDITIONAL([ENABLE_LARGEFILE], [test
- AM_CONDITIONAL([ENABLE_DEVEL], [test "$enable_devel" = "yes"])
- AM_CONDITIONAL([ENABLE_LIBIPQ], [test "$enable_libipq" = "yes"])
+@@ -111,9 +111,7 @@ if test "x$enable_bpfc" = "xyes" || test
+ 	AC_CHECK_LIB(pcap, pcap_compile,, AC_MSG_ERROR(missing libpcap library required by bpf compiler or nfsynproxy tool))
+ fi
  
 -PKG_CHECK_MODULES([libnfnetlink], [libnfnetlink >= 1.0],
 -	[nfnetlink=1], [nfnetlink=0])

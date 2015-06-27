@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2012-2013 OpenWrt.org
+# Copyright (C) 2012-2015 OpenWrt.org
 #
 # This is free software, licensed under the GNU General Public License v2.
 # See /LICENSE for more information.
@@ -8,17 +8,18 @@ include $(TOPDIR)/rules.mk
 
 ARCH:=arm
 BOARD:=mvebu
-BOARDNAME:=Marvell Armada XP/370
-FEATURES:=targz usb jffs2 pci pcie gpio
-CFLAGS:=-Os -pipe -march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=softfp
-MAINTAINER:=Florian Fainelli <florian@openwrt.org>
+BOARDNAME:=Marvell Armada 37x/38x/XP
+FEATURES:=usb pci pcie gpio nand squashfs
+CPU_TYPE:=cortex-a9
+CPU_SUBTYPE:=vfpv3
+MAINTAINER:=Imre Kaloz <kaloz@openwrt.org>
 
-LINUX_VERSION:=3.8.12
+KERNEL_PATCHVER:=3.18
 
 include $(INCLUDE_DIR)/target.mk
 
-KERNELNAME:="zImage dtbs"
+KERNELNAME:=zImage dtbs
 
-DEFAULT_PACKAGES +=
+DEFAULT_PACKAGES += uboot-envtools
 
 $(eval $(call BuildTarget))
